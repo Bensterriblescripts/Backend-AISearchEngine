@@ -1,0 +1,44 @@
+-------------------------
+Query to create a new group, user, category and document:
+
+CREATE (g:Group {name: 'Nanson', owner: '000001'})
+CREATE (u:User {id: '000001', firstname: 'Benjamin', lastname: 'Nanson', prefname: 'Ben'})
+CREATE (d:Document {name: 'Resume - Benjamin Nanson', filetype: 'pdf', owner: '000001', content: ''})
+CREATE (c:Category {name: 'Resume'})
+CREATE (c)-[:CONTAINS]->(d)
+CREATE (d)-[:OWNEDBY]->(g)
+CREATE (u)-[:ISMEMBEROF]->(g)
+
+-------------------------
+Create a new document with a new category, assign an existing user and group:
+
+MATCH (u:User {id: '000001'}), (g:Group {name: 'Nanson'})
+CREATE (d:Document {
+    name: 'Cover Letter - Benjamin Nanson',
+    filetype: 'pdf',
+    owner: u.id,
+    content: ''
+})
+CREATE (c:Category {name: 'Job Applications'})
+CREATE (c)-[:CONTAINS]->(d)
+CREATE (d)-[:OWNEDBY]->(g)
+
+-------------------------
+Create a new user and assign them to a group:
+
+MERGE (g:Group {name: 'Nanson'})
+CREATE (u:User {
+    id: '000002',
+    firstname: 'Alice',
+    lastname: 'Johnson',
+    prefname: 'Ali'
+})
+CREATE (u)-[:ISMEMBEROF]->(g)
+
+-------------------------
+Create a new group:
+
+CREATE (g:Group {
+    name: 'Nanson',
+    created: datetime()
+})
