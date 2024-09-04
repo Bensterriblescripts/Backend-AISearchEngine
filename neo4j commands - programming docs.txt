@@ -1,0 +1,56 @@
+-------------------------
+Function Insert:
+
+MERGE (r:Repository {name: 'Backend-AISearchEngine'})
+ON CREATE SET
+  r.added = datetime()
+ON MATCH SET
+  r.modified = datetime()
+
+MERGE (d:Document {name: 'observer.php', type: 'php', path: 'subrepo1\subsubrepo1\'})
+ON CREATE SET
+  d.version = 1
+  d.added = datetime()
+ON MATCH SET
+  d.version = COALESCE(d.version, 1) + 1
+  d.modified = datetime()
+
+MERGE (n:Namespace {name: 'local_mitowebservices'})
+ON CREATE SET
+  n.added = datetime()
+
+MERGE (c:Class {name: 'observer', source: 'subrepo1\subsubrepo1\observer.php'})
+ON CREATE SET
+  c.version = 1
+  c.added = datetime()
+  c.content = $content
+ON MATCH SET
+  c.version = COALESCE(c.version, 1) + 1
+  c.modified = datetime()
+  c.content = $content
+  
+MERGE (f:Function {name: 'handle_user_loggedin'})
+ON CREATE SET
+  f.version = 1
+  f.added = datetime()
+  f.content = $content
+  f.linestart = 56
+  f.lineend = 116
+ON MATCH SET
+  f.version = COALESCE(f.version, 1) + 1
+  f.modified = datetime()
+  f.content = $content
+  f.linestart = 67
+  f.lineend = 222
+
+MERGE (r)-[:CONTAINS]->(d)
+
+MERGE (d)-[:NAMESPACE]->(n)
+MERGE (d)-[:CLASS]->(c)
+MERGE (d)-[:FUNCTION]->(f)
+
+MERGE (n)-[:NAMESPACECLASS]->(c)
+MERGE (n)-[:NAMESPACEFUNCTION]->(f)
+
+MERGE (c)-[:CLASSFUNCTION]->(f)
+MERGE (c)-[:CLASSFUNCTION]->(f)

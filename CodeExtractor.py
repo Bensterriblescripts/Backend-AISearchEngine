@@ -15,6 +15,7 @@ ignoreFiles = [".gitignore"]
 open_brace = re.compile('{')
 close_brace = re.compile('}')
 
+
 # # File Extraction
 
 # Locate each repository
@@ -72,6 +73,11 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
     created_sub_function = False
     open_sub_function = False
 
+    sub_function_brace = 0
+    function_brace = 0
+    class_brace = 0
+
+    # Please figure out a better way of doing this later...
     print(f"Entering file: {codeFile[1]}")
     with open(codeFile[1], 'r') as file:
         for line_number, line in enumerate(file, 1):
@@ -84,62 +90,94 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
             # Match class
             match = re.search(re_class, line)
             if match:
-                fn_class = match.group(1)
+                class_name = match.group(1)
                 created_class = True
                 count_classes[0] += 1
+                class_brace = 0
 
-            # Match function - Record the content from here
+            # Match function
             match = re.search(re_function, line)
             if match:
                 if open_function:
                     fn_sub_function = match.group(1)
                     created_sub_function = True
+                    sub_function_brace = 0
                 else:
                     fn_function = match.group(1)
                     created_function = True
+                    function_brace = 0
                 count_functions[0] += 1
 
             # Match open brace
             match = re.search(open_brace, line)
             if match:
+
+                # New function/class brace
                 if created_class:
                     class_start = line_number
                     created_class = False
                     open_class = True
+                    codeWithinClass[class_name] = ""
                 elif created_function:
                     function_start = line_number
                     created_function = False
                     open_function = True
+                    codeWithinFunction[fn_function] = ""
                 elif created_sub_function:
                     sub_function_start = line_number
                     created_sub_function = False
                     open_sub_function = True
+                    codeWithinFunction[fn_sub_function] = ""
+
+                # Other brace
+                elif open_sub_function:
+                    sub_function_brace += 1
+                elif open_function:
+                    function_brace += 1
+                elif open_class:
+                    class_brace += 1
+
+            # Content in a Function
+            if open_sub_function:
+                codeWithinFunction[fn_sub_function] += line
+            elif open_function:
+                codeWithinFunction[fn_function] += line
+            elif open_class:
+                codeWithinClass[class_name] += line
             
             # Match close brace
             match = re.search(close_brace, line)
             if match:
                 if open_sub_function:
-                    sub_function_end = line_number
-                    open_sub_function = False
-                    codeFunctions.append((f"{fn_function}\\{fn_sub_function}", codeNamespace, fn_class, sub_function_start, sub_function_end))
+                    sub_function_brace -= 1
+                    if sub_function_brace == -1:
+                        sub_function_end = line_number
+                        open_sub_function = False
+                        codeFunctions.append((f"{fn_sub_function}", codeNamespace, class_name, sub_function_start, sub_function_end))
+                        codeWithinFunction[fn_sub_function] += " }"
                 elif open_function:
-                    function_end = line_number
-                    open_function = False
-                    codeFunctions.append((fn_function, codeNamespace, fn_class, function_start, function_end))
+                    function_brace -= 1
+                    if function_brace == -1:
+                        function_end = line_number
+                        open_function = False
+                        codeFunctions.append((fn_function, codeNamespace, class_name, function_start, function_end))
+                        codeWithinFunction[fn_function] += " }"
                 elif open_class:
-                    class_end = line_number
-                    open_class = False
-                    codeClasses.append((fn_class, class_start, class_end))
-
-            # Content outside a function
-            ## Grab content here
+                    class_brace -= 1
+                    if class_brace == -1:
+                        class_end = line_number
+                        open_class = False
+                        codeClasses.append((class_name, class_start, class_end))
+                        codeWithinClass[class_name] += " }"
 
 # Iterate through all files in the repoository
 for repositoryFile in repositoryFiles:
 
     codeNamespace = [""] # Strings must be a list to be mutable...
     codeClasses = []
+    codeWithinClass = {}
     codeFunctions = []
+    codeWithinFunction = {}
     count_classes = [0]
     count_functions = [0]
 
@@ -169,25 +207,18 @@ for repositoryFile in repositoryFiles:
 
         print(f"Total Functions: {count_functions[0]}")
         print(f"Total Classes: {count_classes[0]}")
-        print(f"    Namespace: {codeNamespace[0]}")
+        print(f"\n    Namespace: {codeNamespace[0]}")
         for classes in codeClasses:
-            print(f"    Class: {classes[0]}")
+            print(f"    Class: {classes[0]}\n")
         for functions in codeFunctions:
-            print(f"    Function: {functions[0]} | Start: {functions[3]}, End: {functions[4]}")
+            print(f"    Function: {functions[0]} | Start: {functions[3]}, End: {functions[4]}\n")
+            # print(f"    Code:\n{codeWithinFunction[functions[0]]}")
         print("")
 
 
 # # Database Insertion
 
-# Check existing classes
+# Locate repository
+# Add if it doesn't exist
 
-# 
-
-
-
-
-
-
-        
-
-    
+# Add all by function - repository -> document -> namespace -> class -> function
