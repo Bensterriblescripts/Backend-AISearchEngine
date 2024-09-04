@@ -160,21 +160,21 @@ for repositoryFile in repositoryFiles:
 
         extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
 
-    if (len(codeClasses) != count_classes[0]):
-        print("Error: A class was missed.")
-        continue
-    if (len(codeFunctions) != count_functions[0]):
-        print("Error: A function was missed.")
-        continue
+        if (len(codeClasses) != count_classes[0]):
+            print("Error: A class was missed.")
+            continue
+        if (len(codeFunctions) != count_functions[0]):
+            print("Error: A function was missed.")
+            continue
 
-    print(f"Total Functions: {count_functions[0]}")
-    print(f"Total Classes: {count_classes[0]}")
-    print(f"    Namespace: {codeNamespace[0]}")
-    for classes in codeClasses:
-        print(f"    Class: {classes[0]}")
-    for functions in codeFunctions:
-        print(f"    Function: {functions[0]} | Start: {functions[3]}, End: {functions[4]}")
-    print("")
+        print(f"Total Functions: {count_functions[0]}")
+        print(f"Total Classes: {count_classes[0]}")
+        print(f"    Namespace: {codeNamespace[0]}")
+        for classes in codeClasses:
+            print(f"    Class: {classes[0]}")
+        for functions in codeFunctions:
+            print(f"    Function: {functions[0]} | Start: {functions[3]}, End: {functions[4]}")
+        print("")
 
 
 # # Database Insertion
