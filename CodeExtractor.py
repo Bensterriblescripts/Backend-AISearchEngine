@@ -11,7 +11,11 @@ ignoreDir = [".git", ".idea", ".vs"]
 # Ignore files
 ignoreFiles = [".gitignore"]
 
+# General Regex - I know this is redundant, it's incase it needs additions
+open_brace = re.compile('{')
+close_brace = re.compile('}')
 
+# # File Extraction
 
 # Locate each repository
 repositoryFiles = []
@@ -58,24 +62,131 @@ for repo in repos:
 
             repositoryFiles.append((repo, f"{path}\\{relative_path}\\{file}", f"{relative_path}\\", file))
 
-# Find the functions by filetype
+# Iterate through the lines
+def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
+
+    created_class = False
+    open_class = False
+    created_function = False
+    open_function = False
+    created_sub_function = False
+    open_sub_function = False
+
+    print(f"Entering file: {codeFile[1]}")
+    with open(codeFile[1], 'r') as file:
+        for line_number, line in enumerate(file, 1):
+
+            # Match namespace
+            match = re.search(re_namespace, line)
+            if match:
+                codeNamespace[0] = match.group(1)
+            
+            # Match class
+            match = re.search(re_class, line)
+            if match:
+                fn_class = match.group(1)
+                created_class = True
+                count_classes[0] += 1
+
+            # Match function - Record the content from here
+            match = re.search(re_function, line)
+            if match:
+                if open_function:
+                    fn_sub_function = match.group(1)
+                    created_sub_function = True
+                else:
+                    fn_function = match.group(1)
+                    created_function = True
+                count_functions[0] += 1
+
+            # Match open brace
+            match = re.search(open_brace, line)
+            if match:
+                if created_class:
+                    class_start = line_number
+                    created_class = False
+                    open_class = True
+                elif created_function:
+                    function_start = line_number
+                    created_function = False
+                    open_function = True
+                elif created_sub_function:
+                    sub_function_start = line_number
+                    created_sub_function = False
+                    open_sub_function = True
+            
+            # Match close brace
+            match = re.search(close_brace, line)
+            if match:
+                if open_sub_function:
+                    sub_function_end = line_number
+                    open_sub_function = False
+                    codeFunctions.append((f"{fn_function}\\{fn_sub_function}", codeNamespace, fn_class, sub_function_start, sub_function_end))
+                elif open_function:
+                    function_end = line_number
+                    open_function = False
+                    codeFunctions.append((fn_function, codeNamespace, fn_class, function_start, function_end))
+                elif open_class:
+                    class_end = line_number
+                    open_class = False
+                    codeClasses.append((fn_class, class_start, class_end))
+
+            # Content outside a function
+            ## Grab content here
+
+# Iterate through all files in the repoository
 for repositoryFile in repositoryFiles:
-    # print(f"Repository: {repositoryFile[0]}")
-    # print(f"Path: {repositoryFile[1]}")
-    # print(f"File: {repositoryFile[2]}")
+
+    codeNamespace = [""] # Strings must be a list to be mutable...
+    codeClasses = []
+    codeFunctions = []
+    count_classes = [0]
+    count_functions = [0]
+
+    print("")
+    print(f"Repository: {repositoryFile[0]}")
+    print(f"Path: {repositoryFile[2]}")
+    print(f"File: {repositoryFile[3]}")
 
     # File type distinction
     name, extension = os.path.splitext(repositoryFile[3])
     if (extension == ".php"):
-        print(f"Located PHP script: {repositoryFile[2]}{repositoryFile[3]}")
+        print(f"Identified PHP script")
 
-        function = "function "
+        # PHP Regex
+        basic_namespace_php = re.compile('namespace\\s+(\\w+);')
+        basic_class_php = re.compile('class\\s+(\\w+)\\s+{')
+        basic_fn_php = re.compile('function\\s+(\\w+)')
 
-        print(f"Entering file: {repositoryFile[1]}")
-        with open(repositoryFile[1], 'r') as file:
-            for line_number, line in enumerate(file, 1):
-                if re.search(function, line):
-                    print(f"Line Number: {line_number}, Line: {line.strip()}")
+        extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
+
+    if (len(codeClasses) != count_classes[0]):
+        print("Error: A class was missed.")
+        continue
+    if (len(codeFunctions) != count_functions[0]):
+        print("Error: A function was missed.")
+        continue
+
+    print(f"Total Functions: {count_functions[0]}")
+    print(f"Total Classes: {count_classes[0]}")
+    print(f"    Namespace: {codeNamespace[0]}")
+    for classes in codeClasses:
+        print(f"    Class: {classes[0]}")
+    for functions in codeFunctions:
+        print(f"    Function: {functions[0]} | Start: {functions[3]}, End: {functions[4]}")
+    print("")
+
+
+# # Database Insertion
+
+# Check existing classes
+
+# 
+
+
+
+
+
 
         
 
