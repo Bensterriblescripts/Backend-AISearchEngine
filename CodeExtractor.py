@@ -68,8 +68,6 @@ for repo in repos:
             if extension in supportedExtensions:
                 repositoryFiles.append((repo, f"{path}\\{relative_path}\\{file}", f"{relative_path}\\", file))
                 print(f"Located repository file: {file}")
-        
-exit()
 
 # Iterate through the lines
 def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
