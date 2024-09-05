@@ -14,6 +14,9 @@ conn = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user,neo4j_pass))
 base_path = "C:\\Repositories"
 print(f"Base path set to: {base_path}")
 
+# Supported Extension
+supportedExtensions = [".php"]
+
 # Ignore folders
 ignoreDir = [".git", ".idea", ".vs"]
 
@@ -46,33 +49,27 @@ for repo in repos:
 
         relative_path = os.path.relpath(root, path)
 
-        # Ignore folders by name
-        ignorefolder = False
-        for ignore in ignoreDir:
-            if ignore in relative_path:
-                ignorefolder = True
-                continue
-        if ignorefolder: 
-            continue
-
         # Retrieve the repositories
         for file in files:
 
             # Ignore files by name
-            ignorefile = False
-            for ignore in ignoreFiles:
-                if ignore in file:
-                    ignorefile = True
-                    continue
-            if ignorefile:
+            if file in ignoreFiles:
                 continue
+
+            name, extension = os.path.splitext(file)
             
             # Store
             if relative_path == ".":
-                repositoryFiles.append((repo, f"{path}\\{file}", "", file))
-                continue
-
-            repositoryFiles.append((repo, f"{path}\\{relative_path}\\{file}", f"{relative_path}\\", file))
+                if extension in supportedExtensions:
+                    repositoryFiles.append((repo, f"{path}\\{file}", "", file))
+                    print(f"Located repository file: {file}")
+                    continue
+                
+            if extension in supportedExtensions:
+                repositoryFiles.append((repo, f"{path}\\{relative_path}\\{file}", f"{relative_path}\\", file))
+                print(f"Located repository file: {file}")
+        
+exit()
 
 # Iterate through the lines
 def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
@@ -281,9 +278,9 @@ for repositoryFile in repositoryFiles:
                 ON CREATE SET
                     n.added = datetime()'''
 
-            if classes[0] is not None:
+            if function[2] is not None:
                 addfunction += f'''
-                MERGE (c:Class {{name: '{classes[0]}', source: '{repositoryFile[2]}{repositoryFile[3]}'}})
+                MERGE (c:Class {{name: '{function[2]}', source: '{repositoryFile[2]}{repositoryFile[3]}'}})
                 ON CREATE SET
                     c.version = 1,
                     c.added = datetime(),
@@ -309,7 +306,7 @@ for repositoryFile in repositoryFiles:
                     f.linebegin = $linestart,
                     f.lineend = $lineend'''
 
-            if codeNamespace is not None and classes[0] is not None and function[0] is not None:
+            if codeNamespace is not None and function[2] is not None and function[0] is not None:
                 addfunction += f'''
                 MERGE (r)-[:CONTAINS]->(d)
 
@@ -323,27 +320,36 @@ for repositoryFile in repositoryFiles:
                 MERGE (c)-[:CLASSFUNCTION]->(f)'''
             elif classes[0] is not None and function[0] is not None:
                 addfunction += f'''
-                    MERGE (r)-[:CONTAINS]->(d)
-                    MERGE (d)-[:CLASS]->(c)
-                    MERGE (d)-[:FUNCTION]->(f)
-                    MERGE (c)-[:CLASSFUNCTION]->(f)'''
+                MERGE (r)-[:CONTAINS]->(d)
+                MERGE (d)-[:CLASS]->(c)
+                MERGE (d)-[:FUNCTION]->(f)
+                MERGE (c)-[:CLASSFUNCTION]->(f)'''
             elif function[0] is not None:
                 addfunction += '''
-                    MERGE (r)-[:CONTAINS]->(d)
-                    MERGE (d)-[:FUNCTION]->(f)'''
+                MERGE (r)-[:CONTAINS]->(d)
+                MERGE (d)-[:FUNCTION]->(f)'''
             elif classes[0] is not None:
                 addfunction += '''
-                    MERGE (r)-[:CONTAINS]->(d)
-                    MERGE (d)-[:CLASS]->(c)'''
+                MERGE (r)-[:CONTAINS]->(d)
+                MERGE (d)-[:CLASS]->(c)'''
                 
+            if function[2] is not None:
+                parameter = {                                               # SQL injection rik make all var strings paramaterised
+                    "classContent": codeWithinClass[classes[0]],
+                    "functionContent": codeWithinFunction[function[0]],
+                    "linestart": function[3],
+                    "lineend": function[4]
+                }
+            else:
+                parameter = {
+                    "functionContent": codeWithinFunction[function[0]],
+                    "linestart": function[3],
+                    "lineend": function[4]
+                }
 
-            parameter = {                                               # SQL injection rik make all var strings paramaterised
-                "classContent": codeWithinClass[classes[0]],
-                "functionContent": codeWithinFunction[function[0]],
-                "linestart": function[3],
-                "lineend": function[4]
-            }
             
             results = neo4jquery(addfunction, parameter)
             for record in results:
                 print(record)
+    else:
+        print(f"Extension not supported: {extension}")
