@@ -7,7 +7,7 @@ ON CREATE SET
 ON MATCH SET
   r.modified = datetime()
 
-MERGE (d:Document {name: 'observer.php', type: 'php', path: 'subrepo1\subsubrepo1\'})
+MERGE (d:Document {name: 'observer.php', type: 'php', path: 'subrepo1\subsubrepo1\', repository: 'Backend-AISearchEngine'})
 ON CREATE SET
   d.version = 1
   d.added = datetime()

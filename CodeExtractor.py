@@ -12,8 +12,10 @@ ignoreDir = [".git", ".idea", ".vs"]
 ignoreFiles = [".gitignore"]
 
 # General Regex - I know this is redundant, it's incase it needs additions
+php_start = re.compile('<?php')
 open_brace = re.compile('{')
 close_brace = re.compile('}')
+
 
 
 # # File Extraction
@@ -66,6 +68,7 @@ for repo in repos:
 # Iterate through the lines
 def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
 
+    open_doc = False
     created_class = False
     open_class = False
     created_function = False
@@ -81,6 +84,14 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
     print(f"Entering file: {codeFile[1]}")
     with open(codeFile[1], 'r') as file:
         for line_number, line in enumerate(file, 1):
+
+            # Non-object code
+            if open_doc == False:
+                match = re.search(php_start, line)
+                if match:
+                    open_doc = True
+                else:
+                    continue
 
             # Match namespace
             match = re.search(re_namespace, line)
@@ -137,6 +148,10 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                 elif open_class:
                     class_brace += 1
 
+                # EOF
+                elif open_doc:
+                    open_doc = False
+
             # Content in a Function
             if open_sub_function:
                 codeWithinFunction[fn_sub_function] += line
@@ -144,6 +159,8 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                 codeWithinFunction[fn_function] += line
             elif open_class:
                 codeWithinClass[class_name] += line
+            elif open_doc:
+                codeOpen[0] += line
             
             # Match close brace
             match = re.search(close_brace, line)
@@ -170,14 +187,17 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                         codeClasses.append((class_name, class_start, class_end))
                         codeWithinClass[class_name] += " }"
 
+
 # Iterate through all files in the repoository
 for repositoryFile in repositoryFiles:
 
+    codeOpen = [""]
     codeNamespace = [""] # Strings must be a list to be mutable...
     codeClasses = []
     codeWithinClass = {}
     codeFunctions = []
     codeWithinFunction = {}
+
     count_classes = [0]
     count_functions = [0]
 
@@ -197,7 +217,8 @@ for repositoryFile in repositoryFiles:
         basic_fn_php = re.compile('function\\s+(\\w+)')
 
         extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
-
+        print(f"Total Functions: {count_functions[0]}")
+        print(f"Total Classes: {count_classes[0]}")
         if (len(codeClasses) != count_classes[0]):
             print("Error: A class was missed.")
             continue
@@ -205,20 +226,27 @@ for repositoryFile in repositoryFiles:
             print("Error: A function was missed.")
             continue
 
-        print(f"Total Functions: {count_functions[0]}")
-        print(f"Total Classes: {count_classes[0]}")
         print(f"\n    Namespace: {codeNamespace[0]}")
+        # print(f"\n  Code outside: {codeOpen}")
         for classes in codeClasses:
             print(f"    Class: {classes[0]}\n")
+            # print(f"    Class code: {codeWithinClass[classes[0]]}")
         for functions in codeFunctions:
             print(f"    Function: {functions[0]} | Start: {functions[3]}, End: {functions[4]}\n")
             # print(f"    Code:\n{codeWithinFunction[functions[0]]}")
         print("")
 
 
-# # Database Insertion
+    # # Database Insertion
 
-# Locate repository
-# Add if it doesn't exist
+    # Locate repository
+    addrepo = f'''
+    MERGE (r:Repository {{name: {repositoryFile[0]}}}
+    ON CREATE SET
+        r.added = datetime()
+    ON MATCH SET
+        r.modified = datetime()
+    '''
+    # Add if it doesn't exist
 
-# Add all by function - repository -> document -> namespace -> class -> function
+    # Add all by function - repository -> document -> namespace -> class -> function
