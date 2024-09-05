@@ -89,7 +89,13 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
     function_brace = 0
     class_brace = 0
 
-    codeNamespace[0] = None
+    codeOpen = [""]
+    codeClasses = []
+    codeWithinClass = {}
+    codeFunctions = []
+    codeWithinFunction = {}
+
+    namespace = None
     class_name = None
     fn_function = None
     fn_sub_function = None
@@ -110,7 +116,7 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
             # Match namespace
             match = re.search(re_namespace, line)
             if match:
-                codeNamespace[0] = match.group(1)
+                namespace = match.group(1)
             
             # Match class
             match = re.search(re_class, line)
@@ -184,14 +190,14 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                     if sub_function_brace == -1:
                         sub_function_end = line_number
                         open_sub_function = False
-                        codeFunctions.append((f"{fn_sub_function}", codeNamespace, class_name, sub_function_start, sub_function_end))
+                        codeFunctions.append((f"{fn_sub_function}", namespace, class_name, sub_function_start, sub_function_end))
                         codeWithinFunction[fn_sub_function] += " }"
                 elif open_function:
                     function_brace -= 1
                     if function_brace == -1:
                         function_end = line_number
                         open_function = False
-                        codeFunctions.append((fn_function, codeNamespace, class_name, function_start, function_end))
+                        codeFunctions.append((fn_function, namespace, class_name, function_start, function_end))
                         codeWithinFunction[fn_function] += " }"
                 elif open_class:
                     class_brace -= 1
@@ -200,6 +206,7 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                         open_class = False
                         codeClasses.append((class_name, class_start, class_end))
                         codeWithinClass[class_name] += " }"
+    return namespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction
 
 # Neo4j
 def neo4jquery(query, parameters):
@@ -209,13 +216,6 @@ def neo4jquery(query, parameters):
 
 # Iterate through all files in the repoository
 for repositoryFile in repositoryFiles:
-
-    codeOpen = [""]
-    codeNamespace = [""] # Strings must be a list to be mutable...
-    codeClasses = []
-    codeWithinClass = {}
-    codeFunctions = []
-    codeWithinFunction = {}
 
     count_classes = [0]
     count_functions = [0]
@@ -235,7 +235,7 @@ for repositoryFile in repositoryFiles:
         basic_class_php = re.compile('class\\s+(\\w+)\\s+{')
         basic_fn_php = re.compile('function\\s+(\\w+)')
 
-        extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
+        codeNamespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction = extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
         print(f"Total Functions: {count_functions[0]}")
         print(f"Total Classes: {count_classes[0]}")
         if (len(codeClasses) != count_classes[0]):
@@ -245,7 +245,7 @@ for repositoryFile in repositoryFiles:
             print("Error: A function was missed.")
             continue
 
-        print(f"\n    Namespace: {codeNamespace[0]}")
+        print(f"\n    Namespace: {codeNamespace}")
         # print(f"\n  Code outside: {codeOpen}")
         for classes in codeClasses:
             print(f"    Class: {classes[0]}\n")
@@ -275,9 +275,9 @@ for repositoryFile in repositoryFiles:
                 d.version = COALESCE(d.version, 1) + 1,
                 d.modified = datetime()
             '''
-            if codeNamespace[0] is not None:
+            if codeNamespace is not None:
                 addfunction += f'''
-                MERGE (n:Namespace {{name: '{codeNamespace[0]}'}})
+                MERGE (n:Namespace {{name: '{codeNamespace}'}})
                 ON CREATE SET
                     n.added = datetime()'''
 
@@ -309,7 +309,7 @@ for repositoryFile in repositoryFiles:
                     f.linebegin = $linestart,
                     f.lineend = $lineend'''
 
-            if codeNamespace[0] is not None and classes[0] is not None and function[0] is not None:
+            if codeNamespace is not None and classes[0] is not None and function[0] is not None:
                 addfunction += f'''
                 MERGE (r)-[:CONTAINS]->(d)
 
