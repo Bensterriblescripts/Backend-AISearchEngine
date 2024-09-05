@@ -84,7 +84,7 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
     function_brace = 0
     class_brace = 0
 
-    codeOpen = [""]
+    codeOpen = []
     codeClasses = []
     codeWithinClass = {}
     codeFunctions = []
@@ -106,7 +106,7 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                 if match:
                     open_doc = True
                 else:
-                    continue
+                    continue               
 
             # Match namespace
             match = re.search(re_namespace, line)
@@ -201,7 +201,12 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                         open_class = False
                         codeClasses.append((class_name, class_start, class_end))
                         codeWithinClass[class_name] += " }"
-    return namespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction
+
+            # Match content outside a class or function
+            if not open_sub_function and not open_function and not open_class:
+                codeOpen += line
+
+    return codeOpen, namespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction
 
 # Neo4j
 def neo4jquery(query, parameters):
@@ -215,10 +220,15 @@ for repositoryFile in repositoryFiles:
     count_classes = [0]
     count_functions = [0]
 
+    repo_name = repositoryFile[0]
+    full_path = repositoryFile[1]
+    short_path = repositoryFile[2]
+    file_name = repositoryFile[3]
+
     print("")
-    print(f"Repository: {repositoryFile[0]}")
-    print(f"Path: {repositoryFile[2]}")
-    print(f"File: {repositoryFile[3]}")
+    print(f"Repository: {repo_name}")
+    print(f"Path: {short_path}")
+    print(f"File: {file_name}")
 
     # File type distinction
     name, extension = os.path.splitext(repositoryFile[3])
@@ -230,7 +240,7 @@ for repositoryFile in repositoryFiles:
         basic_class_php = re.compile('class\\s+(\\w+)\\s+{')
         basic_fn_php = re.compile('function\\s+(\\w+)')
 
-        codeNamespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction = extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
+        codeOpen, codeNamespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction = extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
         print(f"Total Functions: {count_functions[0]}")
         print(f"Total Classes: {count_classes[0]}")
         if (len(codeClasses) != count_classes[0]):
@@ -253,16 +263,22 @@ for repositoryFile in repositoryFiles:
 
         # # Database Insertion
         for function in codeFunctions:
+            
+            function_name = function[0]
+            class_name = function[2]
+            function_start = function[3]
+            function_end = function[4]
+            
 
             #Add each function with repo, namespace, and class as well
             addfunction = f'''
-            MERGE (r:Repository {{name: '{repositoryFile[0]}'}})
+            MERGE (r:Repository {{name: '{repo}'}})
             ON CREATE SET
                 r.added = datetime()
             ON MATCH SET
                 r.modified = datetime()
 
-            MERGE (d:Document {{name: '{name}', type: '{extension}', path: '{repositoryFile[1]}', repository: '{repositoryFile[0]}'}})
+            MERGE (d:Document {{name: '{name}', type: '{extension}', path: '{full_path}', repository: '{repo}'}})
             ON CREATE SET
                 d.version = 1,
                 d.added = datetime()
@@ -276,9 +292,9 @@ for repositoryFile in repositoryFiles:
                 ON CREATE SET
                     n.added = datetime()'''
 
-            if function[2] is not None:
+            if class_name is not None:
                 addfunction += f'''
-                MERGE (c:Class {{name: '{function[2]}', source: '{repositoryFile[2]}{repositoryFile[3]}'}})
+                MERGE (c:Class {{name: '{class_name}', source: '{short_path}{full_path}'}})
                 ON CREATE SET
                     c.version = 1,
                     c.added = datetime(),
@@ -288,9 +304,9 @@ for repositoryFile in repositoryFiles:
                     c.modified = datetime(),
                     c.content = $classContent'''
                 
-            if function[0] is not None:
+            if function is not None:
                 addfunction += f'''
-                MERGE (f:Function {{name: '{function[0]}'}})
+                MERGE (f:Function {{name: '{function_name}'}})
                 ON CREATE SET
                     f.version = 1,
                     f.added = datetime(),
@@ -304,7 +320,7 @@ for repositoryFile in repositoryFiles:
                     f.linebegin = $linestart,
                     f.lineend = $lineend'''
 
-            if codeNamespace is not None and function[2] is not None and function[0] is not None:
+            if codeNamespace is not None and class_name is not None and function_name is not None:
                 addfunction += f'''
                 MERGE (r)-[:CONTAINS]->(d)
 
@@ -316,33 +332,33 @@ for repositoryFile in repositoryFiles:
                 MERGE (n)-[:NAMESPACEFUNCTION]->(f)
                 
                 MERGE (c)-[:CLASSFUNCTION]->(f)'''
-            elif classes[0] is not None and function[0] is not None:
+            elif class_name is not None and function_name is not None:
                 addfunction += f'''
                 MERGE (r)-[:CONTAINS]->(d)
                 MERGE (d)-[:CLASS]->(c)
                 MERGE (d)-[:FUNCTION]->(f)
                 MERGE (c)-[:CLASSFUNCTION]->(f)'''
-            elif function[0] is not None:
+            elif function_name is not None:
                 addfunction += '''
                 MERGE (r)-[:CONTAINS]->(d)
                 MERGE (d)-[:FUNCTION]->(f)'''
-            elif classes[0] is not None:
+            elif class_name is not None:
                 addfunction += '''
                 MERGE (r)-[:CONTAINS]->(d)
                 MERGE (d)-[:CLASS]->(c)'''
                 
-            if function[2] is not None:
+            if class_name is not None:
                 parameter = {                                               # SQL injection rik make all var strings paramaterised
-                    "classContent": codeWithinClass[classes[0]],
-                    "functionContent": codeWithinFunction[function[0]],
-                    "linestart": function[3],
-                    "lineend": function[4]
+                    "classContent": codeWithinClass[class_name],
+                    "functionContent": codeWithinFunction[function_name],
+                    "linestart": function_start,
+                    "lineend": function_end
                 }
             else:
                 parameter = {
-                    "functionContent": codeWithinFunction[function[0]],
-                    "linestart": function[3],
-                    "lineend": function[4]
+                    "functionContent": codeWithinFunction[function_name],
+                    "linestart": function_start,
+                    "lineend": function_end
                 }
 
             
