@@ -1,6 +1,15 @@
 import os
 import re
 
+from neo4j import GraphDatabase
+neo4j_uri = os.environ.get('NEO4J_URI')
+neo4j_user = os.environ.get('NEO4J_USER')
+neo4j_pass = os.environ.get('NEO4J_PASS')
+if (not neo4j_uri or not neo4j_user or not neo4j_pass):
+    print("Missing neo4j env variavles")
+    exit()
+conn = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user,neo4j_pass))
+
 # Base folder with repository folders inside
 base_path = "C:\\Repositories\\Backend-AISearchEngine"
 print(f"Base path set to: {base_path}")
@@ -187,6 +196,11 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                         codeClasses.append((class_name, class_start, class_end))
                         codeWithinClass[class_name] += " }"
 
+# Neo4j
+def neo4jquery(query, parameters):
+    with conn.session() as session:
+        result = session.run(query, parameters)
+        return [record for record in result]
 
 # Iterate through all files in the repoository
 for repositoryFile in repositoryFiles:
@@ -231,22 +245,80 @@ for repositoryFile in repositoryFiles:
         for classes in codeClasses:
             print(f"    Class: {classes[0]}\n")
             # print(f"    Class code: {codeWithinClass[classes[0]]}")
-        for functions in codeFunctions:
-            print(f"    Function: {functions[0]} | Start: {functions[3]}, End: {functions[4]}\n")
+        for function in codeFunctions:
+            print(f"    Function: {function[0]} | Start: {function[3]}, End: {function[4]}\n")
             # print(f"    Code:\n{codeWithinFunction[functions[0]]}")
         print("")
 
 
-    # # Database Insertion
+        # # Database Insertion
 
-    # Locate repository
-    addrepo = f'''
-    MERGE (r:Repository {{name: {repositoryFile[0]}}}
-    ON CREATE SET
-        r.added = datetime()
-    ON MATCH SET
-        r.modified = datetime()
-    '''
-    # Add if it doesn't exist
+        # Test
+        function = codeFunctions[0]
+
+        #Add each function with repo, namespace, and class as well
+        addfunction = f'''
+        MERGE (r:Repository {{name: '{repositoryFile[0]}'}})
+        ON CREATE SET
+            r.added = datetime()
+        ON MATCH SET
+            r.modified = datetime()
+
+        MERGE (d:Document {{name: '{name}', type: '{extension}', path: '{repositoryFile[1]}', repository: '{repositoryFile[0]}'}})
+        ON CREATE SET
+            d.version = 1
+            d.added = datetime()
+        ON MATCH SET
+            d.version = COALESCE(d.version, 1) + 1
+            d.modified = datetime()
+
+        MERGE (n:Namespace {name: '{codeNamespace[0]}'})
+            ON CREATE SET
+            n.added = datetime()
+
+        MERGE (c:Class {name: '{classes[0]}', source: '{repositoryFile[2]}{repositoryFile[3]}'})
+        ON CREATE SET
+            c.version = 1
+            c.added = datetime()
+            c.content = $classContent
+        ON MATCH SET
+            c.version = COALESCE(c.version, 1) + 1
+            c.modified = datetime()
+            c.content = $classContent
+        
+        MERGE (f:Function {name: '{function[0]}'})
+        ON CREATE SET
+            f.version = 1
+            f.added = datetime()
+            f.content = $functionContent
+            f.linestart = {function[3]}
+            f.lineend = {function[4]}
+        ON MATCH SET
+            f.version = COALESCE(f.version, 1) + 1
+            f.modified = datetime()
+            f.content = $functionContent
+            f.linestart = {function[3]}
+            f.lineend = {function[4]}
+
+        MERGE (r)-[:CONTAINS]->(d)
+
+        MERGE (d)-[:NAMESPACE]->(n)
+        MERGE (d)-[:CLASS]->(c)
+        MERGE (d)-[:FUNCTION]->(f)
+
+        MERGE (n)-[:NAMESPACECLASS]->(c)
+        MERGE (n)-[:NAMESPACEFUNCTION]->(f)
+
+        MERGE (c)-[:CLASSFUNCTION]->(f)
+        MERGE (c)-[:CLASSFUNCTION]->(f)'''
+
+        parameter = {
+            "classContent": codeWithinClass[classes[0]],
+            "functionContent": codeWithinFunction[function[0]]
+        }
+        
+        results = neo4jquery(addfunction, parameter)
+        for record in results:
+            print(f"Name: {record['name']}, Age: {record['age']}")
 
     # Add all by function - repository -> document -> namespace -> class -> function
