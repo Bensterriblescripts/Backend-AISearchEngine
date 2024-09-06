@@ -241,6 +241,9 @@ for repositoryFile in repositoryFiles:
         basic_fn_php = re.compile('function\\s+(\\w+)')
 
         codeOpen, codeNamespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction = extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
+        print(codeOpen)
+        exit()
+        
         print(f"Total Functions: {count_functions[0]}")
         print(f"Total Classes: {count_classes[0]}")
         if (len(codeClasses) != count_classes[0]):
