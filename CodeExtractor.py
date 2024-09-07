@@ -84,7 +84,7 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
     function_brace = 0
     class_brace = 0
 
-    codeOpen = []
+    codeOpen = ""
     codeClasses = []
     codeWithinClass = {}
     codeFunctions = []
@@ -163,10 +163,6 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
                 elif open_class:
                     class_brace += 1
 
-                # EOF
-                elif open_doc:
-                    open_doc = False
-
             # Content in a Function
             if open_sub_function:
                 codeWithinFunction[fn_sub_function] += line
@@ -175,7 +171,7 @@ def extractCodeByLine(codeFile, re_namespace, re_class, re_function):
             elif open_class:
                 codeWithinClass[class_name] += line
             elif open_doc:
-                codeOpen[0] += line
+                codeOpen += line
             
             # Match close brace
             match = re.search(close_brace, line)
@@ -213,6 +209,150 @@ def neo4jquery(query, parameters):
     with conn.session() as session:
         result = session.run(query, parameters)
         return [record for record in result]
+    
+# Neo4j Queries
+def add_Namespace(namespace):
+    return f'''
+        MERGE (n:Namespace {{name: '{namespace}'}})
+        ON CREATE SET
+        n.added = datetime()'''
+
+def insert_ClassFunction(name, extension, full_path, short_path, repo, namespace, class_name, function_name, function_start, function_end, class_code, function_code):
+    concat_path = short_path + name + extension
+    addfunction = ""
+
+    addfunction = f'''
+    MERGE (r:Repository {{name: $repo}})
+    ON CREATE SET
+        r.added = datetime()
+    ON MATCH SET
+        r.modified = datetime()
+
+    MERGE (d:Document {{name: $fileName, type: $extension, path: $fullPath, repository: $repo}})
+    ON CREATE SET
+        d.version = 1,
+        d.added = datetime()
+    ON MATCH SET
+        d.version = COALESCE(d.version, 1) + 1,
+        d.modified = datetime()'''
+
+    if namespace is not None:
+        addfunction += add_Namespace(namespace)
+
+    addfunction += f'''
+    MERGE (c:Class {{name: $className, source: $concatPath}})
+    ON CREATE SET
+        c.version = 1,
+        c.added = datetime(),
+        c.content = $classContent
+    ON MATCH SET
+        c.version = COALESCE(c.version, 1) + 1,
+        c.modified = datetime(),
+        c.content = $classContent
+
+    MERGE (f:Function {{name: $functionName}})
+    ON CREATE SET
+        f.version = 1,
+        f.added = datetime(),
+        f.content = $functionContent,
+        f.linebegin = $linestart,
+        f.lineend = $lineend
+    ON MATCH SET
+        f.version = COALESCE(f.version, 1) + 1,
+        f.modified = datetime(),
+        f.content = $functionContent,
+        f.linebegin = $linestart,
+        f.lineend = $lineend
+
+    MERGE (r)-[:CONTAINS]->(d)
+
+    MERGE (d)-[:CLASS]->(c)
+    MERGE (d)-[:FUNCTION]->(f)
+    
+    MERGE (c)-[:CLASSFUNCTION]->(f)'''
+
+    if namespace is not None:
+        addfunction += f'''
+        MERGE (d)-[:NAMESPACE]->(n)
+        MERGE (n)-[:NAMESPACECLASS]->(c)
+        MERGE (n)-[:NAMESPACEFUNCTION]->(f)'''
+
+    parameter = {
+        "fileName": name,
+        "extension": extension,
+        "repo": repo,
+        "shortPath": short_path,
+        "fullPath": full_path,
+        "concatPath": concat_path,
+        "functionName": function_name,
+        "className": class_name,
+        "classContent": class_code,
+        "functionContent": function_code,
+        "linestart": function_start,
+        "lineend": function_end
+    }
+
+    results = neo4jquery(addfunction, parameter)
+    for record in results:
+        print(record)
+
+def insert_ClassOnly (name, extension, full_path, short_path, repo, namespace, class_name, class_code):
+    concat_path = short_path + name + extension
+    addfunction = ""
+
+    addfunction = f'''
+    MERGE (r:Repository {{name: $repo}})
+    ON CREATE SET
+        r.added = datetime()
+    ON MATCH SET
+        r.modified = datetime()
+
+    MERGE (d:Document {{name: $fileName, type: $extension, path: $fullPath, repository: $repo}})
+    ON CREATE SET
+        d.version = 1,
+        d.added = datetime()
+    ON MATCH SET
+        d.version = COALESCE(d.version, 1) + 1,
+        d.modified = datetime()'''
+    
+    if namespace is not None:
+        addfunction += add_Namespace(namespace)
+
+    addfunction += f'''
+    MERGE (c:Class {{name: $className, source: $concatPath}})
+    ON CREATE SET
+        c.version = 1,
+        c.added = datetime(),
+        c.content = $classContent
+    ON MATCH SET
+        c.version = COALESCE(c.version, 1) + 1,
+        c.modified = datetime(),
+        c.content = $classContent
+
+    MERGE (r)-[:CONTAINS]->(d)
+    MERGE (d)-[:CLASS]->(c)'''
+
+    if namespace is not None:
+        addfunction += f'''
+        MERGE (d)-[:NAMESPACE]->(n)
+        MERGE (n)-[:NAMESPACECLASS]->(c)'''
+
+    parameter = {
+        "fileName": name,
+        "extension": extension,
+        "repo": repo,
+        "shortPath": short_path,
+        "fullPath": full_path,
+        "concatPath": concat_path,
+        "className": class_name,
+        "classContent": class_code
+    }
+
+    results = neo4jquery(addfunction, parameter)
+    for record in results:
+        print(record)
+    exit()
+
 
 # Iterate through all files in the repoository
 for repositoryFile in repositoryFiles:
@@ -240,9 +380,7 @@ for repositoryFile in repositoryFiles:
         basic_class_php = re.compile('class\\s+(\\w+)\\s+{')
         basic_fn_php = re.compile('function\\s+(\\w+)')
 
-        codeOpen, codeNamespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction = extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
-        print(codeOpen)
-        exit()
+        codeOpen, namespace, codeClasses, codeWithinClass, codeFunctions, codeWithinFunction = extractCodeByLine(repositoryFile, basic_namespace_php, basic_class_php, basic_fn_php)
         
         print(f"Total Functions: {count_functions[0]}")
         print(f"Total Classes: {count_classes[0]}")
@@ -253,7 +391,7 @@ for repositoryFile in repositoryFiles:
             print("Error: A function was missed.")
             continue
 
-        print(f"\n    Namespace: {codeNamespace}")
+        print(f"\n    Namespace: {namespace}")
         # print(f"\n  Code outside: {codeOpen}")
         for classes in codeClasses:
             print(f"    Class: {classes[0]}\n")
@@ -265,108 +403,21 @@ for repositoryFile in repositoryFiles:
 
 
         # # Database Insertion
-        for function in codeFunctions:
-            
-            function_name = function[0]
+        if len(codeFunctions) != 0:
+            for function in codeFunctions:
+                function_name = function[0]
+                class_name = function[2]
+                function_start = function[3]
+                function_end = function[4]
+
+                # insert_ClassFunction(name, extension, full_path, short_path, repo, namespace, class_name, function_name, function_start, function_end, codeWithinClass[class_name], codeWithinFunction[function_name])
+                # insert_ClassOnly(namespace)
+                # insert_FunctionOnly(namespace)
+                # insert_NoObjects(namespace)
+        elif len(codeClasses) != 0:
             class_name = function[2]
-            function_start = function[3]
-            function_end = function[4]
-            
 
-            #Add each function with repo, namespace, and class as well
-            addfunction = f'''
-            MERGE (r:Repository {{name: '{repo}'}})
-            ON CREATE SET
-                r.added = datetime()
-            ON MATCH SET
-                r.modified = datetime()
+            insert_ClassOnly(name, extension, full_path, short_path, repo, namespace, class_name, codeWithinClass[class_name])
 
-            MERGE (d:Document {{name: '{name}', type: '{extension}', path: '{full_path}', repository: '{repo}'}})
-            ON CREATE SET
-                d.version = 1,
-                d.added = datetime()
-            ON MATCH SET
-                d.version = COALESCE(d.version, 1) + 1,
-                d.modified = datetime()
-            '''
-            if codeNamespace is not None:
-                addfunction += f'''
-                MERGE (n:Namespace {{name: '{codeNamespace}'}})
-                ON CREATE SET
-                    n.added = datetime()'''
-
-            if class_name is not None:
-                addfunction += f'''
-                MERGE (c:Class {{name: '{class_name}', source: '{short_path}{full_path}'}})
-                ON CREATE SET
-                    c.version = 1,
-                    c.added = datetime(),
-                    c.content = $classContent
-                ON MATCH SET
-                    c.version = COALESCE(c.version, 1) + 1,
-                    c.modified = datetime(),
-                    c.content = $classContent'''
-                
-            if function is not None:
-                addfunction += f'''
-                MERGE (f:Function {{name: '{function_name}'}})
-                ON CREATE SET
-                    f.version = 1,
-                    f.added = datetime(),
-                    f.content = $functionContent,
-                    f.linebegin = $linestart,
-                    f.lineend = $lineend
-                ON MATCH SET
-                    f.version = COALESCE(f.version, 1) + 1,
-                    f.modified = datetime(),
-                    f.content = $functionContent,
-                    f.linebegin = $linestart,
-                    f.lineend = $lineend'''
-
-            if codeNamespace is not None and class_name is not None and function_name is not None:
-                addfunction += f'''
-                MERGE (r)-[:CONTAINS]->(d)
-
-                MERGE (d)-[:NAMESPACE]->(n)
-                MERGE (d)-[:CLASS]->(c)
-                MERGE (d)-[:FUNCTION]->(f)
-
-                MERGE (n)-[:NAMESPACECLASS]->(c)
-                MERGE (n)-[:NAMESPACEFUNCTION]->(f)
-                
-                MERGE (c)-[:CLASSFUNCTION]->(f)'''
-            elif class_name is not None and function_name is not None:
-                addfunction += f'''
-                MERGE (r)-[:CONTAINS]->(d)
-                MERGE (d)-[:CLASS]->(c)
-                MERGE (d)-[:FUNCTION]->(f)
-                MERGE (c)-[:CLASSFUNCTION]->(f)'''
-            elif function_name is not None:
-                addfunction += '''
-                MERGE (r)-[:CONTAINS]->(d)
-                MERGE (d)-[:FUNCTION]->(f)'''
-            elif class_name is not None:
-                addfunction += '''
-                MERGE (r)-[:CONTAINS]->(d)
-                MERGE (d)-[:CLASS]->(c)'''
-                
-            if class_name is not None:
-                parameter = {                                               # SQL injection rik make all var strings paramaterised
-                    "classContent": codeWithinClass[class_name],
-                    "functionContent": codeWithinFunction[function_name],
-                    "linestart": function_start,
-                    "lineend": function_end
-                }
-            else:
-                parameter = {
-                    "functionContent": codeWithinFunction[function_name],
-                    "linestart": function_start,
-                    "lineend": function_end
-                }
-
-            
-            results = neo4jquery(addfunction, parameter)
-            for record in results:
-                print(record)
     else:
         print(f"Extension not supported: {extension}")
