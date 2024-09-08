@@ -12,12 +12,12 @@ public static class Extractor {
     private static readonly String[] ignoreDir = new String[3] { ".git", ".idea", ".vs" }; // Case sensitive
     private static readonly String[] ignoreFiles = new String[1] { ".gitignore" }; // Case sensitive
 
-    public static void Main() {
-        String result = Extract();
+    public static async Task Main() {
+        String result = await Extract();
         Console.WriteLine(result);
     }
 
-    private static String Extract() {
+    private static async Task<String> Extract() {
 
         /* These may be read in from another source */
         Boolean MultiRepo = false;
@@ -40,7 +40,7 @@ public static class Extractor {
                 String[] directories = Directory.GetDirectories(BaseFolder);
                 foreach (String folder in directories) {
                     Console.WriteLine($"Entering Repository: {folder}");
-                    error = PHP_RetrieveRepositoryFiles(folder, ref error);
+                    error = await PHP_RetrieveRepositoryFiles(folder);
                     return $"Error : {error}";
                 }
             }
@@ -51,7 +51,7 @@ public static class Extractor {
         }
         else {
             Console.WriteLine($"Entering Repository: {BaseFolder}");
-            error = PHP_RetrieveRepositoryFiles(BaseFolder, ref error);
+            error = await PHP_RetrieveRepositoryFiles(BaseFolder);
             if (error != null) {
                 return $"Error : {error}";
             }
@@ -60,7 +60,7 @@ public static class Extractor {
         return "Operation Completed.";
     }
 
-    private static String? PHP_RetrieveRepositoryFiles(String repository, ref String? error) {
+    private static async Task<String?> PHP_RetrieveRepositoryFiles(String repository) {
         Regex re_Namespace = new(@"namespace\s+([A-Za-z_][\w.]*)\s*;", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         Regex re_Class =
             new(
@@ -95,7 +95,7 @@ public static class Extractor {
                 String shortPath = Path.GetRelativePath(repository, filePath);
                 Console.WriteLine($"\nFile {fileName}\nPath: {filePath}\nRelative Path: {shortPath}");
                 
-                error = ScrapeCode(filePath, re_Namespace, re_Class, re_Function, ref error);
+                String? error = await ScrapeCode(filePath, re_Namespace, re_Class, re_Function);
             }
 
             return null;
@@ -105,7 +105,7 @@ public static class Extractor {
         }
     }
 
-    private static String? ScrapeCode(String file, Regex re_Namespace, Regex re_Class, Regex re_Function, ref String? error) {
+    private static async Task<String?> ScrapeCode(String file, Regex re_Namespace, Regex re_Class, Regex re_Function) {
         
         /*
          * Function Dictionary:
@@ -227,13 +227,14 @@ public static class Extractor {
         Console.WriteLine($"    Classes: {classes.Count}");
         Console.WriteLine($"    Functions: {functions.Count}");
 
-        error = Queries.RunQuery(namespaces, classes, functions, openCode, error);
+        String? error = await Queries.RunQuery(namespaces, classes, functions, openCode);
+        
         namespaces.Clear();
         classes.Clear();
         functions.Clear();
         openCode.Clear();
 
-        return null;
+        return error;
     }
 
     public class FunctionInfo(StringBuilder content, Int16 startLine, Int16 endLine) {
