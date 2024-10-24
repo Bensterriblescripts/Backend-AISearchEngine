@@ -1,5 +1,4 @@
-﻿using System.Data;
-using System.Text;
+﻿using System.Text;
 using Neo4j.Driver;
 
 namespace CodeExtractor;
