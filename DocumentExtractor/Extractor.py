@@ -1,5 +1,4 @@
 import os
-import shutil
 from neo4j import GraphDatabase
 
 import fitz # PyMuPDF
